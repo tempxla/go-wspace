@@ -5,244 +5,344 @@ import (
 	"io/ioutil"
 )
 
-const cTAB = '\t'
-const cSPACE = ' '
-const cLF = '\n'
+type intStack []int
 
-var stack []int
+type state int
+
+const (
+	ok = iota
+	ng
+	end
+)
+
+const (
+	TAB   = '\t'
+	SPACE = ' '
+	LF    = '\n'
+)
+
+var stack intStack
 var heap map[int]int
-var callstack []int
+var callstack intStack
+var labels map[int]int
 var source []byte
 var pointer int
+
+var errMsg string
 
 func init() {
 	stack = make([]int, 1024)
 	heap = make(map[int]int)
 	callstack = make([]int, 1024)
+	labels = make(map[int]int)
 	pointer = 0
 }
 
 func read() byte {
-	c := source[pointer]
-	pointer++
-	return c
+	for { // skip comment
+		c := source[pointer]
+		pointer++
+		switch c {
+		case SPACE, TAB, LF:
+			return c
+		}
+	}
 }
 
-func impStack() {
+func impStack() state {
 	c := read()
 	switch c {
-	case cSPACE: // [Space] NumberPush the number onto the stack
-		number()
-	case cLF:
+	case SPACE: // [Space] Number Push the number onto the stack
+		return number()
+	case LF:
 		c = read()
 		switch c {
-		case cSPACE: // [LF][Space] Duplicate the top item on the stack
-			dup()
-		case cTAB: //[LF][Tab] Swap the top two items on the stack
-			swap()
-		case cLF: //[LF][LF] Discard the top item on the stack
-			discard()
-		default:
-			parseError(c)
+		case SPACE: // [LF][Space] Duplicate the top item on the stack
+			stack.dup()
+		case TAB: //[LF][Tab] Swap the top two items on the stack
+			stack.swap()
+		case LF: //[LF][LF] Discard the top item on the stack
+			stack.discard()
 		}
-	default:
-		parseError(c)
+	case TAB:
+		return parseError(c)
 	}
+	return ok
 }
 
-func number() {
+func number() state {
 	var sign int
-	num := 0
 	c := read()
 	switch c {
-	case cSPACE: // [Space] for positive
+	case SPACE: // [Space] for positive
 		sign = 1
-	case cTAB: // [Tab] for negative
+	case TAB: // [Tab] for negative
 		sign = -1
-	default:
-		parseError(c)
+	case LF:
+		return parseError(c)
 	}
-	for c := read(); c != cLF; {
-		switch c {
-		case cSPACE: // [Space] represents the binary digit 0
-			num = num * 2
-		case cTAB: // [Tab] for negative
-			num = num*2 + 1
-		default:
-			parseError(c)
-		}
+	n, st := label()
+	if st == ng {
+		return ng
 	}
-	push(sign * num)
+	stack.push(sign * n)
+	return ok
 }
 
-func push(e int) {
-	stack = append(stack, e)
+func (stack *intStack) push(e int) {
+	*stack = append(*stack, e)
 }
 
-func pop() int {
-	val := stack[len(stack)-1]
-	discard()
+func (stack *intStack) pop() int {
+	val := (*stack)[len(*stack)-1]
+	(*stack).discard()
 	return val
 }
 
-func dup() {
-	stack = append(stack, stack[len(stack)-1])
+func (stack *intStack) dup() {
+	*stack = append(*stack, (*stack)[len(*stack)-1])
 }
 
-func swap() {
-	end := len(stack) - 1
-	stack[end-1], stack[end] = stack[end], stack[end-1]
+func (stack *intStack) swap() {
+	end := len(*stack) - 1
+	(*stack)[end-1], (*stack)[end] = (*stack)[end], (*stack)[end-1]
 }
 
-func discard() {
-	stack = stack[:len(stack)-2]
+func (stack *intStack) discard() {
+	*stack = (*stack)[:len(*stack)-2]
 }
 
-func impArith() {
+func (stack *intStack) peek() int {
+	return (*stack)[len(*stack)-1]
+}
+
+func impArith() state {
 	c := read()
 	switch c {
-	case cSPACE:
+	case SPACE:
 		c = read()
 		switch c {
-		case cSPACE: // [Space][Space] Addition
+		case SPACE: // [Space][Space] Addition
 			biOp(func(a, b int) int { return a + b })
-		case cTAB: // [Space][Tab] Subtraction
+		case TAB: // [Space][Tab] Subtraction
 			biOp(func(a, b int) int { return a - b })
-		case cLF: // [Space][LF] Multiplication
+		case LF: // [Space][LF] Multiplication
 			biOp(func(a, b int) int { return a * b })
-		default:
-			parseError(c)
 		}
-	case cTAB:
+	case TAB:
 		c = read()
 		switch c {
-		case cSPACE: // [Tab][Space] Integer Division
+		case SPACE: // [Tab][Space] Integer Division
 			biOp(func(a, b int) int { return a / b })
-		case cTAB: // [Tab][Tab] Modulo
+		case TAB: // [Tab][Tab] Modulo
 			biOp(func(a, b int) int { return a % b })
-		default:
-			parseError(c)
 		}
-	default:
-		parseError(c)
+	case LF:
+		return parseError(c)
 	}
+	return ok
 }
 
 func biOp(op func(int, int) int) {
-	l := pop()
-	r := pop()
-	push(op(l, r))
+	l := stack.pop()
+	r := stack.pop()
+	stack.push(op(l, r))
 }
 
-func impHeap() {
+func impHeap() state {
 	c := read()
 	switch c {
-	case cSPACE: // [Space] Store
-		val := pop()
-		addr := pop()
+	case SPACE: // [Space] Store
+		val := stack.pop()
+		addr := stack.pop()
 		heap[addr] = val
-	case cTAB: // [Tab] Retrieve
-		addr := pop()
-		push(heap[addr])
-	default:
-		parseError(c)
+	case TAB: // [Tab] Retrieve
+		addr := stack.pop()
+		stack.push(heap[addr])
+	case LF:
+		return parseError(c)
 	}
+	return ok
 }
 
-func impFlow() {
+func impFlow() state {
 	c := read()
 	switch c {
-	case cSPACE:
+	case SPACE:
 		c = read()
 		switch c {
-		case cSPACE: // [Space][Space] Label Mark a location in the program
-			// TODO
-		case cTAB: // [Space][Tab] Label Call a subroutine
-			// TODO
-		case cLF: //[Space][LF] Label Jump unconditionally to a label
-			// TODO
-		default:
-			parseError(c)
+		case SPACE: // [Space][Space] Label Mark a location in the program
+			mark()
+		case TAB: // [Space][Tab] Label Call a subroutine
+			call()
+		case LF: //[Space][LF] Label Jump unconditionally to a label
+			jump()
 		}
-	case cTAB:
+	case TAB:
 		c = read()
 		switch c {
-		case cSPACE: // [Tab][Space] Label Jump to a label if the top of the stack is zero
-			// TODO
-		case cTAB: // [Tab][Tab] Label Jump to a label if the top of the stack is negative
-			// TODO
-		case cLF: // [Tab][LF] End a subroutine and transfer control back to the caller
-			// TODO
-		default:
-			parseError(c)
+		case SPACE: // [Tab][Space] Label Jump to a label if the top of the stack is zero
+			jumpZE()
+		case TAB: // [Tab][Tab] Label Jump to a label if the top of the stack is negative
+			jumpNE()
+		case LF: // [Tab][LF] End a subroutine and transfer control back to the caller
+			retrun()
 		}
-	case cLF:
+	case LF:
 		c = read()
 		switch c {
-		case cLF: // [LF][LF] End the program
-			// TODO
-		default:
-			parseError(c)
+		case LF: // [LF][LF] End the program
+			return end
+		case TAB:
+			fallthrough
+		case SPACE:
+			return parseError(c)
 		}
-	default:
-		parseError(c)
 	}
+	return ok
 }
 
-func impIO() {
+func label() (int, state) {
+	var n int
 	c := read()
 	switch c {
-	case cSPACE:
-		c = read()
-		switch c {
-		case cSPACE: // [Space][Space] Output the character at the top of the stack
-			// TODO
-		case cTAB: // [Space][Tab] Output the number at the top of the stack
-			// TODO
-		default:
-			parseError(c)
-		}
-	case cTAB:
-		c = read()
-		switch c {
-		case cSPACE: // [Tab][Space] Read a character and place it in the location given by the top of the stack
-			// TODO
-		case cTAB: // [Tab][Tab] Read a number and place it in the location given by the top of the stack
-			// TODO
-		default:
-			parseError(c)
-		}
-	default:
-		parseError(c)
+	case SPACE: // [Space] represents the binary digit 0
+		n = 0
+	case TAB: // [Tab] represents 1
+		n = 1
+	case LF:
+		return 0, parseError(c)
 	}
+	for c = read(); c != LF; c = read() {
+		switch c {
+		case SPACE: // [Space] represents the binary digit 0
+			n = n * 2
+		case TAB: // [Tab] represents 1
+			n = n*2 + 1
+		}
+	}
+	return n, ok
 }
 
-func eval() {
+func mark() state {
+	n, st := label()
+	if st == ng {
+		return ng
+	}
+	labels[n] = pointer
+	return ok
+}
+
+func call() state {
+	n, st := label()
+	if st == ng {
+		return ng
+	}
+	p := labels[n]
+	callstack.push(pointer)
+	pointer = p
+	return ok
+}
+
+func jump() state {
+	n, st := label()
+	if st == ng {
+		return ng
+	}
+	pointer = labels[n]
+	return ok
+}
+
+func jumpZE() state {
+	n, st := label()
+	if st == ng {
+		return ng
+	}
+	if stack.peek() == 0 {
+		pointer = labels[n]
+	}
+	return ok
+}
+
+func jumpNE() state {
+	n, st := label()
+	if st == ng {
+		return ng
+	}
+	if stack.peek() < 0 {
+		pointer = labels[n]
+	}
+	return ok
+}
+
+func retrun() {
+	pointer = callstack.pop()
+}
+
+func impIO() state {
 	c := read()
 	switch c {
-	case cSPACE: // [Space] Stack Manipulation
-		impStack()
-	case cTAB:
+	case SPACE:
 		c = read()
 		switch c {
-		case cSPACE: //[Tab][Space] Arithmetic
-			impArith()
-		case cTAB: // [Tab][Tab] Heap access
-			impHeap()
-		case cLF: // [Tab][LF] I/O
-			impIO()
-		default:
-			parseError(c)
+		case SPACE: // [Space][Space] Output the character at the top of the stack
+			// TODO
+		case TAB: // [Space][Tab] Output the number at the top of the stack
+			// TODO
+		case LF:
+			return parseError(c)
 		}
-	case cLF: // [LF] Flow Control
-		impFlow()
-	default:
-		parseError(c)
+	case TAB:
+		c = read()
+		switch c {
+		case SPACE: // [Tab][Space] Read a character and place it in the location given by the top of the stack
+			// TODO
+		case TAB: // [Tab][Tab] Read a number and place it in the location given by the top of the stack
+			// TODO
+		case LF:
+			return parseError(c)
+		}
+	case LF:
+		return parseError(c)
 	}
+	return ok
 }
 
-func parseError(c byte) {
-	fmt.Printf("error: unexpected character [%c]\n", c)
+func eval() state {
+	var st state
+	c := read()
+	switch c {
+	case SPACE: // [Space] Stack Manipulation
+		st = impStack()
+	case TAB:
+		c = read()
+		switch c {
+		case SPACE: //[Tab][Space] Arithmetic
+			st = impArith()
+		case TAB: // [Tab][Tab] Heap access
+			st = impHeap()
+		case LF: // [Tab][LF] I/O
+			st = impIO()
+		default:
+			st = parseError(c)
+		}
+	case LF: // [LF] Flow Control
+		st = impFlow()
+	}
+	switch st {
+	case ok:
+		eval()
+	case ng:
+		return ng
+	default:
+		return end
+	}
+	return end
+}
+
+func parseError(c byte) state {
+	errMsg = fmt.Sprintf("error: unexpected character [%c], pos:%d\n", c, pointer)
+	return ng
 }
 
 func parseFromFile(path string) {
