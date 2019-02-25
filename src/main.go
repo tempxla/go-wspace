@@ -172,21 +172,21 @@ func impFlow() state {
 		c = read()
 		switch c {
 		case SPACE: // [Space][Space] Label Mark a location in the program
-			mark()
+			return mark()
 		case TAB: // [Space][Tab] Label Call a subroutine
-			call()
+			return call()
 		case LF: //[Space][LF] Label Jump unconditionally to a label
-			jump()
+			return jump()
 		}
 	case TAB:
 		c = read()
 		switch c {
 		case SPACE: // [Tab][Space] Label Jump to a label if the top of the stack is zero
-			jumpZE()
+			return jumpZE()
 		case TAB: // [Tab][Tab] Label Jump to a label if the top of the stack is negative
-			jumpNE()
+			return jumpNE()
 		case LF: // [Tab][LF] End a subroutine and transfer control back to the caller
-			retrun()
+			return retrun()
 		}
 	case LF:
 		c = read()
@@ -275,8 +275,9 @@ func jumpNE() state {
 	return ok
 }
 
-func retrun() {
+func retrun() state {
 	pointer = callstack.pop()
+	return ok
 }
 
 func impIO() state {
@@ -323,21 +324,18 @@ func eval() state {
 			st = impHeap()
 		case LF: // [Tab][LF] I/O
 			st = impIO()
-		default:
-			st = parseError(c)
 		}
 	case LF: // [LF] Flow Control
 		st = impFlow()
 	}
 	switch st {
 	case ok:
-		eval()
+		return eval()
 	case ng:
 		return ng
 	default:
 		return end
 	}
-	return end
 }
 
 func parseError(c byte) state {
