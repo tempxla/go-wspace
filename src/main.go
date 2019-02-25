@@ -39,7 +39,7 @@ func init() {
 }
 
 func read() byte {
-	for { // skip comment
+	for { // skip comments
 		c := source[pointer]
 		pointer++
 		switch c {
@@ -109,7 +109,7 @@ func (stack *intStack) swap() {
 }
 
 func (stack *intStack) discard() {
-	*stack = (*stack)[:len(*stack)-2]
+	*stack = (*stack)[:len(*stack)-1]
 }
 
 func (stack *intStack) peek() int {
