@@ -87,9 +87,9 @@ func eval() {
 	case end:
 		return
 	case wtn:
-		fmt.Print(cd.arg)
+		fmt.Print(stack.peek())
 	case wtc:
-		fmt.Print(rune(cd.arg))
+		fmt.Print(rune(stack.peek()))
 	case rdn:
 		s, _ := reader.ReadString('\n')
 		i, _ := strconv.Atoi(s)

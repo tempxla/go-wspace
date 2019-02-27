@@ -177,7 +177,7 @@ func label(st *state) (n int, err error) {
 			n = n*2 + 1
 		}
 	}
-	return 0, nil
+	return
 }
 
 func impIO(st *state) (err error) {
