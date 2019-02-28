@@ -16,6 +16,7 @@ type state struct {
 type parseError struct {
 	act byte
 	pos int
+	msg string
 }
 
 func newParseError(act byte, pos int) *parseError {
@@ -23,7 +24,11 @@ func newParseError(act byte, pos int) *parseError {
 }
 
 func (e *parseError) Error() string {
-	return fmt.Sprintf("error: unexpected character [%c], pos:%d\n", e.act, e.pos)
+	if e.msg == "" {
+		return fmt.Sprintf("error: unexpected character [%d], pos:%d\n", e.act, e.pos)
+	} else {
+		return e.msg
+	}
 }
 
 func read(st *state) (c byte, eof bool) {
@@ -84,7 +89,7 @@ func number(st *state) (err error) {
 		err = newParseError(c, st.pos)
 		return
 	}
-	n, err := label(st)
+	n, err := uint(st)
 	if err != nil {
 		return
 	}
@@ -172,6 +177,10 @@ func impFlow(st *state) (err error) {
 		if eof {
 			return
 		}
+		if c == LF { // [Tab][LF] End a subroutine and transfer control back to the caller
+			st.code = append(st.code, imp{cmd: ret})
+			return
+		}
 		n, err := label(st)
 		if err != nil {
 			return err
@@ -181,8 +190,6 @@ func impFlow(st *state) (err error) {
 			st.code = append(st.code, imp{cmd: jze, arg: n})
 		case TAB: // [Tab][Tab] Label Jump to a label if the top of the stack is negative
 			st.code = append(st.code, imp{cmd: jne, arg: n})
-		case LF: // [Tab][LF] End a subroutine and transfer control back to the caller
-			st.code = append(st.code, imp{cmd: ret})
 		}
 	case LF:
 		c, eof = read(st)
@@ -199,16 +206,24 @@ func impFlow(st *state) (err error) {
 	return
 }
 
+func uint(st *state) (n int, err error) {
+	return foldBits(st, 0)
+}
+
 func label(st *state) (n int, err error) {
+	return foldBits(st, 1)
+}
+
+func foldBits(st *state, init int) (n int, err error) {
 	c, eof := read(st)
 	if eof {
 		return
 	}
 	switch c {
 	case SPACE: // [Space] represents the binary digit 0
-		n = 0
+		n = init * 2
 	case TAB: // [Tab] represents 1
-		n = 1
+		n = init*2 + 1
 	case LF:
 		err = newParseError(c, st.pos)
 		return
@@ -313,10 +328,16 @@ func parse(src []byte) (code []imp, err error) {
 		return
 	}
 	// label -> address
-	for _, cd := range st.code {
-		switch cd.cmd {
+	for i := range st.code {
+		switch st.code[i].cmd {
 		case cll, jmp, jze, jne:
-			cd.arg = st.addrs[cd.arg]
+			addr, ok := st.addrs[st.code[i].arg]
+			if !ok {
+				label := fmt.Sprintf("%b", st.code[i].arg)[1:]
+				err = &parseError{msg: fmt.Sprintf("Label Not Found: %s", label)}
+				return
+			}
+			st.code[i].arg = addr
 		}
 	}
 	code = st.code
