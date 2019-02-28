@@ -7,6 +7,7 @@ import (
 
 type state struct {
 	src   []byte
+	len   int
 	pos   int
 	addrs map[int]int // label -> address
 	code  []imp
@@ -17,28 +18,43 @@ type parseError struct {
 	pos int
 }
 
+func newParseError(act byte, pos int) *parseError {
+	return &parseError{act: act, pos: pos}
+}
+
 func (e *parseError) Error() string {
 	return fmt.Sprintf("error: unexpected character [%c], pos:%d\n", e.act, e.pos)
 }
 
-func read(st *state) byte {
-	for { // skip comments
-		c := st.src[st.pos]
-		(*st).pos++
+func read(st *state) (c byte, eof bool) {
+	if st.pos == st.len {
+		eof = true
+		return
+	}
+	for st.pos < st.len { // skip comments
+		c = st.src[st.pos]
+		st.pos++
 		switch c {
 		case SPACE, TAB, LF:
-			return c
+			return c, false
 		}
 	}
+	return
 }
 
 func impStack(st *state) (err error) {
-	c := read(st)
+	c, eof := read(st)
+	if eof {
+		return
+	}
 	switch c {
 	case SPACE: // [Space] Number Push the number onto the stack
 		return number(st)
 	case LF:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		switch c {
 		case SPACE: // [LF][Space] Duplicate the top item on the stack
 			st.code = append(st.code, imp{cmd: dup})
@@ -48,21 +64,24 @@ func impStack(st *state) (err error) {
 			st.code = append(st.code, imp{cmd: pop})
 		}
 	case TAB:
-		return &parseError{}
+		return newParseError(c, st.pos)
 	}
 	return
 }
 
 func number(st *state) (err error) {
 	var sign int
-	c := read(st)
+	c, eof := read(st)
+	if eof {
+		return
+	}
 	switch c {
 	case SPACE: // [Space] for positive
 		sign = 1
 	case TAB: // [Tab] for negative
 		sign = -1
 	case LF:
-		err = &parseError{}
+		err = newParseError(c, st.pos)
 		return
 	}
 	n, err := label(st)
@@ -74,10 +93,16 @@ func number(st *state) (err error) {
 }
 
 func impArith(st *state) (err error) {
-	c := read(st)
+	c, eof := read(st)
+	if eof {
+		return
+	}
 	switch c {
 	case SPACE:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		switch c {
 		case SPACE: // [Space][Space] Addition
 			st.code = append(st.code, imp{cmd: add})
@@ -87,7 +112,10 @@ func impArith(st *state) (err error) {
 			st.code = append(st.code, imp{cmd: mul})
 		}
 	case TAB:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		switch c {
 		case SPACE: // [Tab][Space] Integer Division
 			st.code = append(st.code, imp{cmd: div})
@@ -95,29 +123,38 @@ func impArith(st *state) (err error) {
 			st.code = append(st.code, imp{cmd: mod})
 		}
 	case LF:
-		return &parseError{}
+		return newParseError(c, st.pos)
 	}
 	return
 }
 
 func impHeap(st *state) (err error) {
-	c := read(st)
+	c, eof := read(st)
+	if eof {
+		return
+	}
 	switch c {
 	case SPACE: // [Space] Store
 		st.code = append(st.code, imp{cmd: sto})
 	case TAB: // [Tab] Retrieve
 		st.code = append(st.code, imp{cmd: lod})
 	case LF:
-		return &parseError{}
+		return newParseError(c, st.pos)
 	}
 	return
 }
 
 func impFlow(st *state) (err error) {
-	c := read(st)
+	c, eof := read(st)
+	if eof {
+		return
+	}
 	switch c {
 	case SPACE:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		n, err := label(st)
 		if err != nil {
 			return err
@@ -131,7 +168,10 @@ func impFlow(st *state) (err error) {
 			st.code = append(st.code, imp{cmd: jmp, arg: n})
 		}
 	case TAB:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		n, err := label(st)
 		if err != nil {
 			return err
@@ -145,31 +185,35 @@ func impFlow(st *state) (err error) {
 			st.code = append(st.code, imp{cmd: ret})
 		}
 	case LF:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		switch c {
 		case LF: // [LF][LF] End the coderam
 			st.code = append(st.code, imp{cmd: end})
-		case TAB:
-			fallthrough
-		case SPACE:
-			return &parseError{}
+		case TAB, SPACE:
+			return newParseError(c, st.pos)
 		}
 	}
-	return nil
+	return
 }
 
 func label(st *state) (n int, err error) {
-	c := read(st)
+	c, eof := read(st)
+	if eof {
+		return
+	}
 	switch c {
 	case SPACE: // [Space] represents the binary digit 0
 		n = 0
 	case TAB: // [Tab] represents 1
 		n = 1
 	case LF:
-		err = &parseError{}
+		err = newParseError(c, st.pos)
 		return
 	}
-	for c = read(st); c != LF; c = read(st) {
+	for c, eof = read(st); c != LF && !eof; c, eof = read(st) {
 		switch c {
 		case SPACE: // [Space] represents the binary digit 0
 			n = n * 2
@@ -181,41 +225,56 @@ func label(st *state) (n int, err error) {
 }
 
 func impIO(st *state) (err error) {
-	c := read(st)
+	c, eof := read(st)
+	if eof {
+		return
+	}
 	switch c {
 	case SPACE:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		switch c {
 		case SPACE: // [Space][Space] Output the character at the top of the stack
 			st.code = append(st.code, imp{cmd: wtc})
 		case TAB: // [Space][Tab] Output the number at the top of the stack
 			st.code = append(st.code, imp{cmd: wtn})
 		case LF:
-			return &parseError{}
+			return newParseError(c, st.pos)
 		}
 	case TAB:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		switch c {
 		case SPACE: // [Tab][Space] Read a character and place it in the location given by the top of the stack
 			st.code = append(st.code, imp{cmd: rdc})
 		case TAB: // [Tab][Tab] Read a number and place it in the location given by the top of the stack
 			st.code = append(st.code, imp{cmd: rdn})
 		case LF:
-			return &parseError{}
+			return newParseError(c, st.pos)
 		}
 	case LF:
-		return &parseError{}
+		return newParseError(c, st.pos)
 	}
 	return
 }
 
-func parse(st *state) (err error) {
-	c := read(st)
+func runParser(st *state) (err error) {
+	c, eof := read(st)
+	if eof {
+		return
+	}
 	switch c {
 	case SPACE: // [Space] Stack Manipulation
 		err = impStack(st)
 	case TAB:
-		c = read(st)
+		c, eof = read(st)
+		if eof {
+			return
+		}
 		switch c {
 		case SPACE: // [Tab][Space] Arithmetic
 			err = impArith(st)
@@ -228,19 +287,28 @@ func parse(st *state) (err error) {
 		err = impFlow(st)
 	}
 	if err != nil {
-		return err
+		return
 	}
-	parse(st)
-	return
+	return runParser(st)
 }
 
 func parseFromFile(path string) (code []imp, err error) {
-	source, err := ioutil.ReadFile(path)
+	src, err := ioutil.ReadFile(path)
 	if err != nil {
 		return
 	}
-	st := state{src: source, pos: 0, addrs: make(map[int]int), code: make([]imp, 1024)}
-	err = parse(&st)
+	return parse(src)
+}
+
+func parse(src []byte) (code []imp, err error) {
+	st := state{
+		src:   src,
+		len:   len(src),
+		pos:   0,
+		addrs: make(map[int]int),
+		code:  make([]imp, 0, 1024),
+	}
+	err = runParser(&st)
 	if err != nil {
 		return
 	}
@@ -251,5 +319,6 @@ func parseFromFile(path string) (code []imp, err error) {
 			cd.arg = st.addrs[cd.arg]
 		}
 	}
+	code = st.code
 	return
 }
