@@ -18,6 +18,12 @@ func testEqImp(t *testing.T, expected imp, actual imp) {
 	}
 }
 
+func testEqStr(t *testing.T, expected string, actual string) {
+	if expected != actual {
+		t.Errorf(errorFormat, expected, actual)
+	}
+}
+
 func mkSource(str string) []byte {
 	var bs []byte
 	for _, c := range str {
@@ -34,8 +40,8 @@ func mkSource(str string) []byte {
 }
 
 func TestParseStack(t *testing.T) {
-	src := `SS(push) STL(+1)
-			SS(push) TTSTL(-101)
+	src := `SS(psh) STL(+1)
+			SS(psh) TTSTL(-101)
 			SLS(dup)
 			SLT(swp)
 			SLL(pop)
@@ -107,4 +113,21 @@ func TestParseFlow(t *testing.T) {
 	testEqImp(t, imp{cmd: jne, arg: 2}, cd[3])
 	testEqImp(t, imp{cmd: ret}, cd[4])
 	testEqImp(t, imp{cmd: end}, cd[5])
+}
+
+func TestParseIO(t *testing.T) {
+	src := `TLSS(wtc)
+			TLST(wtn)
+			TLTS(rdc)
+			TLTT(rdn)
+			LLL               `
+	cd, err := parse(mkSource(src))
+	if err != nil {
+		t.Error(err)
+	}
+	testEqImp(t, imp{cmd: wtc}, cd[0])
+	testEqImp(t, imp{cmd: wtn}, cd[1])
+	testEqImp(t, imp{cmd: rdc}, cd[2])
+	testEqImp(t, imp{cmd: rdn}, cd[3])
+	testEqImp(t, imp{cmd: end}, cd[4])
 }

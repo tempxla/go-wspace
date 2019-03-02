@@ -7,7 +7,6 @@ import (
 
 type state struct {
 	src   []byte
-	len   int
 	pos   int
 	addrs map[int]int // label -> address
 	code  []imp
@@ -32,11 +31,11 @@ func (e *parseError) Error() string {
 }
 
 func read(st *state) (c byte, eof bool) {
-	if st.pos == st.len {
+	if st.pos == len(st.src) {
 		eof = true
 		return
 	}
-	for st.pos < st.len { // skip comments
+	for st.pos < len(st.src) { // skip comments
 		c = st.src[st.pos]
 		st.pos++
 		switch c {
@@ -318,7 +317,6 @@ func parseFromFile(path string) (code []imp, err error) {
 func parse(src []byte) (code []imp, err error) {
 	st := state{
 		src:   src,
-		len:   len(src),
 		pos:   0,
 		addrs: make(map[int]int),
 		code:  make([]imp, 0, 1024),

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 )
@@ -19,14 +20,14 @@ func (stack *intStack) pop() int {
 	return val
 }
 
-func (stack *intStack) swap() {
-	end := len(*stack) - 1
-	(*stack)[end-1], (*stack)[end] = (*stack)[end], (*stack)[end-1]
-}
+// func (stack *intStack) swap() {
+// 	end := len(*stack) - 1
+// 	(*stack)[end-1], (*stack)[end] = (*stack)[end], (*stack)[end-1]
+// }
 
-func (stack *intStack) peek() int {
-	return (*stack)[len(*stack)-1]
-}
+// func (stack *intStack) _peek() int {
+// 	return (*stack)[len(*stack)-1]
+// }
 
 var code []imp
 var addr int
@@ -34,6 +35,7 @@ var stack intStack
 var heap map[int]int
 var callstack intStack
 var reader *bufio.Reader
+var writer io.Writer
 
 func eval(cd []imp) {
 	code = cd
@@ -41,19 +43,34 @@ func eval(cd []imp) {
 	stack = make([]int, 0, 1024)
 	heap = make(map[int]int)
 	callstack = make([]int, 0, 1024)
-	reader = bufio.NewReader(os.Stdin)
+	if reader == nil {
+		reader = bufio.NewReader(os.Stdin)
+	}
+	if writer == nil {
+		writer = os.Stdout
+	}
+	runEval()
+	// for i, imp := range code {
+	// 	fmt.Printf("%4d %v\n", i, imp)
+	// }
 }
 
 func runEval() {
+	//fmt.Println(":::addr::: ", addr, stack)
 	cd := code[addr]
 	addr++
 	switch cd.cmd {
 	case psh:
 		stack.push(cd.arg)
 	case dup:
-		stack.push(stack.peek())
+		a := stack.pop()
+		stack.push(a)
+		stack.push(a)
 	case swp:
-		stack.swap()
+		a := stack.pop()
+		b := stack.pop()
+		stack.push(a)
+		stack.push(b)
 	case pop:
 		stack.pop()
 	case add:
@@ -84,11 +101,11 @@ func runEval() {
 	case jmp:
 		addr = cd.arg
 	case jze:
-		if stack.peek() == 0 {
+		if stack.pop() == 0 {
 			addr = cd.arg
 		}
 	case jne:
-		if stack.peek() < 0 {
+		if stack.pop() < 0 {
 			addr = cd.arg
 		}
 	case ret:
@@ -96,9 +113,9 @@ func runEval() {
 	case end:
 		return
 	case wtn:
-		fmt.Print(stack.peek())
+		fmt.Fprint(writer, stack.pop())
 	case wtc:
-		fmt.Print(rune(stack.peek()))
+		fmt.Fprint(writer, string(stack.pop()))
 	case rdn:
 		s, _ := reader.ReadString('\n')
 		i, _ := strconv.Atoi(s)
