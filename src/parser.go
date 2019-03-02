@@ -53,7 +53,10 @@ func impStack(st *state) (err error) {
 	}
 	switch c {
 	case SPACE: // [Space] Number Push the number onto the stack
-		return number(st)
+		var n int
+		n, err = number(st)
+		st.code = append(st.code, imp{cmd: psh, arg: n})
+		return
 	case LF:
 		c, eof = read(st)
 		if eof {
@@ -73,7 +76,8 @@ func impStack(st *state) (err error) {
 	return
 }
 
-func number(st *state) (err error) {
+func number(st *state) (number int, err error) {
+	// SIGN
 	var sign int
 	c, eof := read(st)
 	if eof {
@@ -88,16 +92,9 @@ func number(st *state) (err error) {
 		err = newParseError(c, st.pos)
 		return
 	}
-	n, err := uint(st)
-	if err != nil {
-		return
-	}
-	st.code = append(st.code, imp{cmd: psh, arg: sign * n})
-	return
-}
-
-func uint(st *state) (n int, err error) {
-	c, eof := read(st)
+	// NUMBER
+	n := 0
+	c, eof = read(st)
 	if eof {
 		return
 	}
@@ -119,6 +116,7 @@ func uint(st *state) (n int, err error) {
 			n = n*2 + 1
 		}
 	}
+	number = sign * n
 	return
 }
 
