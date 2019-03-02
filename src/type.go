@@ -38,14 +38,16 @@ const (
 type imp struct {
 	cmd int
 	arg int
+	lbl string
 }
 
 func (imp imp) String() string {
 	fmt1 := "[%s]"
-	fmt2 := "[%s %d(%s)]"
+	fmt2 := "[%s %d]"
+	fmt3 := "[%s %d %s]"
 	switch imp.cmd {
 	case psh:
-		return fmt.Sprintf(fmt2, "psh", imp.arg, string(imp.arg))
+		return fmt.Sprintf(fmt2, "psh", imp.arg)
 	case dup:
 		return fmt.Sprintf(fmt1, "dup")
 	case swp:
@@ -67,15 +69,15 @@ func (imp imp) String() string {
 	case lod:
 		return fmt.Sprintf(fmt1, "lod")
 	case mrk:
-		return fmt.Sprintf(fmt1, "mrk")
+		return fmt.Sprintf("[%s %s]", "mrk", imp.lbl)
 	case cll:
-		return fmt.Sprintf(fmt2, "cll", imp.arg, string(imp.arg))
+		return fmt.Sprintf(fmt3, "cll", imp.arg, imp.lbl)
 	case jmp:
-		return fmt.Sprintf(fmt2, "jmp", imp.arg, string(imp.arg))
+		return fmt.Sprintf(fmt3, "jmp", imp.arg, imp.lbl)
 	case jze:
-		return fmt.Sprintf(fmt2, "jze", imp.arg, string(imp.arg))
+		return fmt.Sprintf(fmt3, "jze", imp.arg, imp.lbl)
 	case jne:
-		return fmt.Sprintf(fmt2, "jne", imp.arg, string(imp.arg))
+		return fmt.Sprintf(fmt3, "jne", imp.arg, imp.lbl)
 	case ret:
 		return fmt.Sprintf(fmt1, "ret")
 	case end:

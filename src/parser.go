@@ -8,7 +8,7 @@ import (
 type state struct {
 	src   []byte
 	pos   int
-	addrs map[int]int // label -> address
+	addrs map[string]int // label -> address
 	code  []imp
 }
 
@@ -96,6 +96,32 @@ func number(st *state) (err error) {
 	return
 }
 
+func uint(st *state) (n int, err error) {
+	c, eof := read(st)
+	if eof {
+		return
+	}
+	n = 0
+	switch c {
+	case SPACE: // [Space] represents the binary digit 0
+		n = n * 2
+	case TAB: // [Tab] represents 1
+		n = n*2 + 1
+	case LF:
+		err = newParseError(c, st.pos)
+		return
+	}
+	for c, eof = read(st); c != LF && !eof; c, eof = read(st) {
+		switch c {
+		case SPACE: // [Space] represents the binary digit 0
+			n = n * 2
+		case TAB: // [Tab] represents 1
+			n = n*2 + 1
+		}
+	}
+	return
+}
+
 func impArith(st *state) (err error) {
 	c, eof := read(st)
 	if eof {
@@ -159,17 +185,21 @@ func impFlow(st *state) (err error) {
 		if eof {
 			return
 		}
-		n, err := label(st)
+		l, err := label(st)
 		if err != nil {
 			return err
 		}
 		switch c {
 		case SPACE: // [Space][Space] Label Mark a location in the coderam
-			st.addrs[n] = len(st.code)
+			if _, exist := st.addrs[l]; exist {
+				return &parseError{msg: fmt.Sprintf("Label Duplicated: %s", l)}
+			}
+			st.code = append(st.code, imp{cmd: mrk, lbl: l})
+			st.addrs[l] = len(st.code)
 		case TAB: // [Space][Tab] Label Call a subroutine
-			st.code = append(st.code, imp{cmd: cll, arg: n})
+			st.code = append(st.code, imp{cmd: cll, lbl: l})
 		case LF: //[Space][LF] Label Jump unconditionally to a label
-			st.code = append(st.code, imp{cmd: jmp, arg: n})
+			st.code = append(st.code, imp{cmd: jmp, lbl: l})
 		}
 	case TAB:
 		c, eof = read(st)
@@ -180,15 +210,15 @@ func impFlow(st *state) (err error) {
 			st.code = append(st.code, imp{cmd: ret})
 			return
 		}
-		n, err := label(st)
+		l, err := label(st)
 		if err != nil {
 			return err
 		}
 		switch c {
 		case SPACE: // [Tab][Space] Label Jump to a label if the top of the stack is zero
-			st.code = append(st.code, imp{cmd: jze, arg: n})
+			st.code = append(st.code, imp{cmd: jze, lbl: l})
 		case TAB: // [Tab][Tab] Label Jump to a label if the top of the stack is negative
-			st.code = append(st.code, imp{cmd: jne, arg: n})
+			st.code = append(st.code, imp{cmd: jne, lbl: l})
 		}
 	case LF:
 		c, eof = read(st)
@@ -205,24 +235,17 @@ func impFlow(st *state) (err error) {
 	return
 }
 
-func uint(st *state) (n int, err error) {
-	return foldBits(st, 0)
-}
-
-func label(st *state) (n int, err error) {
-	return foldBits(st, 1)
-}
-
-func foldBits(st *state, init int) (n int, err error) {
+func label(st *state) (label string, err error) {
 	c, eof := read(st)
 	if eof {
 		return
 	}
+	var bs []byte
 	switch c {
 	case SPACE: // [Space] represents the binary digit 0
-		n = init * 2
+		bs = append(bs, 'S')
 	case TAB: // [Tab] represents 1
-		n = init*2 + 1
+		bs = append(bs, 'T')
 	case LF:
 		err = newParseError(c, st.pos)
 		return
@@ -230,11 +253,12 @@ func foldBits(st *state, init int) (n int, err error) {
 	for c, eof = read(st); c != LF && !eof; c, eof = read(st) {
 		switch c {
 		case SPACE: // [Space] represents the binary digit 0
-			n = n * 2
+			bs = append(bs, 'S')
 		case TAB: // [Tab] represents 1
-			n = n*2 + 1
+			bs = append(bs, 'T')
 		}
 	}
+	label = string(bs)
 	return
 }
 
@@ -318,7 +342,7 @@ func parse(src []byte) (code []imp, err error) {
 	st := state{
 		src:   src,
 		pos:   0,
-		addrs: make(map[int]int),
+		addrs: make(map[string]int),
 		code:  make([]imp, 0, 1024),
 	}
 	err = runParser(&st)
@@ -329,10 +353,9 @@ func parse(src []byte) (code []imp, err error) {
 	for i := range st.code {
 		switch st.code[i].cmd {
 		case cll, jmp, jze, jne:
-			addr, ok := st.addrs[st.code[i].arg]
+			addr, ok := st.addrs[st.code[i].lbl]
 			if !ok {
-				label := fmt.Sprintf("%b", st.code[i].arg)[1:]
-				err = &parseError{msg: fmt.Sprintf("Label Not Found: %s", label)}
+				err = &parseError{msg: fmt.Sprintf("Label Not Found: %s", st.code[i].lbl)}
 				return
 			}
 			st.code[i].arg = addr

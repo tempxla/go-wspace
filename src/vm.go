@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type intStack []int
@@ -19,15 +20,6 @@ func (stack *intStack) pop() int {
 	*stack = (*stack)[:len(*stack)-1]
 	return val
 }
-
-// func (stack *intStack) swap() {
-// 	end := len(*stack) - 1
-// 	(*stack)[end-1], (*stack)[end] = (*stack)[end], (*stack)[end-1]
-// }
-
-// func (stack *intStack) _peek() int {
-// 	return (*stack)[len(*stack)-1]
-// }
 
 var code []imp
 var addr int
@@ -49,10 +41,10 @@ func eval(cd []imp) {
 	if writer == nil {
 		writer = os.Stdout
 	}
-	runEval()
 	// for i, imp := range code {
 	// 	fmt.Printf("%4d %v\n", i, imp)
 	// }
+	runEval()
 }
 
 func runEval() {
@@ -94,7 +86,7 @@ func runEval() {
 	case lod:
 		stack.push(heap[stack.pop()])
 	case mrk:
-		// unreachable
+		// do nothing
 	case cll:
 		callstack.push(addr)
 		addr = cd.arg
@@ -118,11 +110,15 @@ func runEval() {
 		fmt.Fprint(writer, string(stack.pop()))
 	case rdn:
 		s, _ := reader.ReadString('\n')
-		i, _ := strconv.Atoi(s)
-		stack.push(i)
+		i, err := strconv.Atoi(strings.TrimRight(s, "\r\n"))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			heap[stack.pop()] = i
+		}
 	case rdc:
 		r, _, _ := reader.ReadRune()
-		stack.push(int(r))
+		heap[stack.pop()] = int(r)
 	}
 	runEval()
 }

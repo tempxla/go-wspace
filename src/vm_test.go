@@ -160,9 +160,8 @@ func TestVmIo2(t *testing.T) {
 	buf.WriteString("B")
 	reader = bufio.NewReader(buf)
 	eval(cd)
-	testEqInt(t, 2, len(stack))
-	testEqInt(t, 66, stack[len(stack)-1])
-	testEqInt(t, 65, stack[len(stack)-2])
+	testEqInt(t, 0, len(stack))
+	testEqInt(t, 66, heap[65])
 }
 
 func TestVmIo3(t *testing.T) {
@@ -174,10 +173,9 @@ func TestVmIo3(t *testing.T) {
 		t.Error(err)
 	}
 	buf := &bytes.Buffer{}
-	buf.WriteString("15")
+	buf.WriteString("15\r\n")
 	reader = bufio.NewReader(buf)
 	eval(cd)
-	testEqInt(t, 2, len(stack))
-	testEqInt(t, 15, stack[len(stack)-1])
-	testEqInt(t, 65, stack[len(stack)-2])
+	testEqInt(t, 0, len(stack))
+	testEqInt(t, 15, heap[65])
 }

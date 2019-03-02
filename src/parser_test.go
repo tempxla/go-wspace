@@ -94,25 +94,27 @@ func TestParseHeap(t *testing.T) {
 }
 
 func TestParseFlow(t *testing.T) {
-	src := `LSS(mrk) SL
-			LST(cll) SSSL     -- 0
-			LSL(jmp) SL       -- 1
-			LSS(mrk) SSSL
-			LTS(jze) SL       -- 2
-			LTT(jne) SSSL     -- 3
-			LTL(ret)          -- 4
-			LLL               -- 5  `
+	src := `LSS(mrk) SL       -- 0
+			LST(cll) STSL     -- 1
+			LSL(jmp) SL       -- 2
+			LSS(mrk) STSL     -- 3
+			LTS(jze) SL       -- 4
+			LTT(jne) STSL     -- 5
+			LTL(ret)          -- 6
+			LLL               -- 7  `
 	cd, err := parse(mkSource(src))
 	if err != nil {
 		t.Error(err)
 	}
-	testEqInt(t, 6, len(cd)) // not exist, mrk
-	testEqImp(t, imp{cmd: cll, arg: 2}, cd[0])
-	testEqImp(t, imp{cmd: jmp, arg: 0}, cd[1])
-	testEqImp(t, imp{cmd: jze, arg: 0}, cd[2])
-	testEqImp(t, imp{cmd: jne, arg: 2}, cd[3])
-	testEqImp(t, imp{cmd: ret}, cd[4])
-	testEqImp(t, imp{cmd: end}, cd[5])
+	testEqInt(t, 8, len(cd))
+	testEqImp(t, imp{cmd: mrk, lbl: "S"}, cd[0])
+	testEqImp(t, imp{cmd: cll, arg: 4, lbl: "STS"}, cd[1])
+	testEqImp(t, imp{cmd: jmp, arg: 1, lbl: "S"}, cd[2])
+	testEqImp(t, imp{cmd: mrk, lbl: "STS"}, cd[3])
+	testEqImp(t, imp{cmd: jze, arg: 1, lbl: "S"}, cd[4])
+	testEqImp(t, imp{cmd: jne, arg: 4, lbl: "STS"}, cd[5])
+	testEqImp(t, imp{cmd: ret}, cd[6])
+	testEqImp(t, imp{cmd: end}, cd[7])
 }
 
 func TestParseIO(t *testing.T) {
